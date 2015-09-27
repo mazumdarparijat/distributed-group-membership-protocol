@@ -8,6 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Receiver extends Thread{
+	public byte[] receiveData = new byte[1024];
+	public byte[] sendData = new byte[1024]; 
 	public DatagramSocket socket;
 	public ConcurrentHashMap<String,Tuple> Mlist;
 	public ConcurrentHashMap<String,Tuple> Jlist;
@@ -25,31 +27,32 @@ public class Receiver extends Thread{
 		this.Awklist=Awklist;
 		protocolTime=counter;
 	}
+	public void handleMsg(DatagramPacket receivePacket){
+		String sentence = new String( receivePacket.getData());
+		System.out.println("RECEIVED: " + sentence);                   
+		InetAddress IPAddress = receivePacket.getAddress();                   
+		int port = receivePacket.getPort();                   
+		String capitalizedSentence = sentence.toUpperCase();                   
+		sendData = capitalizedSentence.getBytes();                  
+		DatagramPacket sendPacket =                  
+				new DatagramPacket(sendData, sendData.length, IPAddress, port);                   
+		try {
+			socket.send(sendPacket);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 	@Override
-	public void run(){
-		byte[] receiveData = new byte[1024];
-		byte[] sendData = new byte[1024];             
+	public void run(){            
 		while(true){                   
 			DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);                   
 			try {
 				socket.receive(receivePacket);
 			} catch (IOException e) {
 				e.printStackTrace();
-			}                   
-			String sentence = new String( receivePacket.getData());                   
-			System.out.println("RECEIVED: " + sentence);                   
-			InetAddress IPAddress = receivePacket.getAddress();                   
-			int port = receivePacket.getPort();                   
-			String capitalizedSentence = sentence.toUpperCase();                   
-			sendData = capitalizedSentence.getBytes();                  
-			DatagramPacket sendPacket =                  
-					new DatagramPacket(sendData, sendData.length, IPAddress, port);                   
-			try {
-				socket.send(sendPacket);
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
 			}
+			handleMsg(receivePacket);
 		} 
 	}
 }
