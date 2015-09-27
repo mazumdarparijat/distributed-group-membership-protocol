@@ -5,22 +5,25 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Receiver extends Thread{
 	public DatagramSocket socket;
-	public ConcurrentHashMap<Pid,Tuple> Mlist;
+	public ConcurrentHashMap<String,Tuple> Mlist;
 	public ConcurrentHashMap<String,Tuple> Jlist;
 	public ConcurrentHashMap<String,Tuple> Slist;
 	public ConcurrentHashMap<String,Tuple> Flist;
 	public ConcurrentHashMap<String,Tuple> Awklist;
-	public Receiver(DatagramSocket socket,ConcurrentHashMap<Pid,Tuple> Mlist,ConcurrentHashMap<String,Tuple> Jlist
+	public AtomicInteger protocolTime;
+	public Receiver(DatagramSocket socket,ConcurrentHashMap<String,Tuple> Mlist,ConcurrentHashMap<String,Tuple> Jlist
 			,ConcurrentHashMap<String,Tuple> Slist,ConcurrentHashMap<String,Tuple> Flist
-			,ConcurrentHashMap<String,Tuple> AwkList){
+			,ConcurrentHashMap<String,Tuple> AwkList, AtomicInteger counter){
 		this.socket=socket;
 		this.Mlist=Mlist;
 		this.Slist=Slist;
 		this.Flist=Flist;
 		this.Awklist=Awklist;
+		protocolTime=counter;
 	}
 	@Override
 	public void run(){

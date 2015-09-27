@@ -7,21 +7,24 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class FD{
 	private Pid introducer_id;
 	public Pid self_id;
 	public DatagramSocket socket;
+	public AtomicInteger protocolTime=new AtomicInteger(0);
 	public long timestamp;
-	public ConcurrentHashMap<Pid,Tuple> Mlist;
-	public ConcurrentHashMap<String,Tuple> Jlist;
-	public ConcurrentHashMap<String,Tuple> Slist;
-	public ConcurrentHashMap<String,Tuple> Flist;
-	public ConcurrentHashMap<String,Tuple> Awklist;
+	public ConcurrentHashMap<String,Tuple> Mlist = new ConcurrentHashMap<String,Tuple>();
+	public ConcurrentHashMap<String,Tuple> Jlist=new ConcurrentHashMap<String,Tuple>();
+	public ConcurrentHashMap<String,Tuple> Slist=new ConcurrentHashMap<String,Tuple>();
+	public ConcurrentHashMap<String,Tuple> Flist=new ConcurrentHashMap<String,Tuple>();
+	public ConcurrentHashMap<String,Tuple> Awklist=new ConcurrentHashMap<String,Tuple>();
 	public void addMember(Pid p, Tuple t){
-		Mlist.put(p, t);
+		Mlist.put(p.toString(), t);
 	}
 	public FD(int port, String iadd, int iport){
+		this();
 		timestamp=System.currentTimeMillis();
 		try {
 			self_id=new Pid(InetAddress.getLocalHost().getHostName(),port,timestamp);
@@ -32,7 +35,6 @@ public class FD{
 		addMember(new Pid(iadd,iport,0),new Tuple("ALIVE", 0));
 	}
 	public FD(){
-		
 	}
 	public void runFD() throws SocketException {
 		try {
@@ -40,10 +42,10 @@ public class FD{
 		} catch (SocketException e) {
 			e.printStackTrace();
 		}
-		Thread receiverThread = new Receiver(socket,Mlist,Jlist,Slist,Flist, Awklist);
+		Thread receiverThread = new Receiver(socket,Mlist,Jlist,Slist,Flist, Awklist, protocolTime);
 		receiverThread.setDaemon(true);
 		receiverThread.start();
-		Thread senderThread = new Sender(socket,Mlist,Jlist,Slist,Flist, Awklist);
+		Thread senderThread = new Sender(socket,Mlist,Jlist,Slist,Flist, Awklist,protocolTime);
 		senderThread.setDaemon(true);
 		senderThread.start();
 		System.out.println("Press any key + enter to leave");

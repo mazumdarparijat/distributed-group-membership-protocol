@@ -32,9 +32,9 @@ public class serverMain {
 			int port = Integer.parseInt(line.getOptionValue("port"));
 			String iadd=line.getOptionValues("i")[0];  
 			int iport=Integer.parseInt(line.getOptionValues("i")[1]);
-			System.out.println(port);
-			System.out.println(iadd);
-			System.out.println(iport);
+			//System.out.println(port);
+			//System.out.println(iadd);
+			//System.out.println(iport);
 			return new FD(port,iadd,iport);
 		}
 	}
