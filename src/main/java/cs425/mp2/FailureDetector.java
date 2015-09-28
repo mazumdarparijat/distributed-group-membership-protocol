@@ -1,6 +1,5 @@
 package cs425.mp2;
 
-import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
@@ -9,7 +8,7 @@ import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class FD{
+public class FailureDetector {
 	private Pid introducer_id;
 	public Pid self_id;
 	public DatagramSocket socket;
@@ -23,7 +22,7 @@ public class FD{
 	public void addMember(Pid p, Tuple t){
 		Mlist.put(p.toString(), t);
 	}
-	public FD(int port, String iadd, int iport){
+	public FailureDetector(int port, String iadd, int iport){
 		this();
 		timestamp=System.currentTimeMillis();
 		try {
@@ -34,7 +33,7 @@ public class FD{
 		introducer_id=new Pid(iadd,iport,0);
 		addMember(new Pid(iadd,iport,0),new Tuple("ALIVE", 0));
 	}
-	public FD(){
+	public FailureDetector(){
 	}
 	public void runFD() throws SocketException {
 		try {
