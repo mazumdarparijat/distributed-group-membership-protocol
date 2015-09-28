@@ -14,7 +14,7 @@ public class serverMain {
 	/**
 	 * Formats commandline inputs and flags
 	 */
-	private static FD FormatCommandLineInputs(String [] args) {
+	private static FailureDetector FormatCommandLineInputs(String [] args) {
 		Options op=createOptions();
 		CommandLineParser parser=new DefaultParser();
 		CommandLine line=null;
@@ -35,7 +35,7 @@ public class serverMain {
 			//System.out.println(port);
 			//System.out.println(iadd);
 			//System.out.println(iport);
-			return new FD(port,iadd,iport);
+			return new FailureDetector(port,iadd,iport);
 		}
 	}
 
@@ -60,7 +60,7 @@ public class serverMain {
 		formatter.printHelp("faliureDetector",op);
 	}
 	public static void main(String [] args) throws IOException {
-		FD faliureDetector = FormatCommandLineInputs(args);
-		faliureDetector.runFD();
+//		FailureDetector faliureDetector = FormatCommandLineInputs(args);
+//		faliureDetector.runFD();
 	}
 }
