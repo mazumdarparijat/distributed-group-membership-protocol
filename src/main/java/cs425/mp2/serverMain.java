@@ -32,9 +32,6 @@ public class serverMain {
 			int port = Integer.parseInt(line.getOptionValue("port"));
 			String iadd=line.getOptionValues("i")[0];  
 			int iport=Integer.parseInt(line.getOptionValues("i")[1]);
-			//System.out.println(port);
-			//System.out.println(iadd);
-			//System.out.println(iport);
 			return new FailureDetector(port,iadd,iport);
 		}
 	}
@@ -57,10 +54,10 @@ public class serverMain {
 	 */
 	private static void printHelp(Options op) {
 		HelpFormatter formatter = new HelpFormatter();
-		formatter.printHelp("faliureDetector",op);
+		formatter.printHelp("failureDetector",op);
 	}
 	public static void main(String [] args) throws IOException {
-//		FailureDetector faliureDetector = FormatCommandLineInputs(args);
-//		faliureDetector.runFD();
+		FailureDetector failureDetector = FormatCommandLineInputs(args);
+		failureDetector.startFD();
 	}
 }

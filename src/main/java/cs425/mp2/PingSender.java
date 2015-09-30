@@ -11,23 +11,27 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static cs425.mp2.FailureDetector.getSpreadTime;
+
 public class PingSender extends Thread{
     private static final int SUBGROUP_K=2;
 	private final DatagramSocket socket;
     private final long pingTimeOut;
     private final long protocolTime;
     private final Set<String> memberSet;
+    private final ConcurrentHashMap<Info,Integer> infoMap;
     private final String idString;
     private AtomicInteger time;
     private CountDownLatch ackReceived;
 
-    public PingSender(DatagramSocket socket, Set<String> memberSet, String idStr,
-                      AtomicInteger time, CountDownLatch ackReceived,
+    public PingSender(DatagramSocket socket, Set<String> memberSet, ConcurrentHashMap<Info,Integer> infoMap,
+                      String idStr, AtomicInteger time, CountDownLatch ackReceived,
                       long pingTimeOut, long protocolTime) {
         this.socket=socket;
         this.pingTimeOut=pingTimeOut;
         this.protocolTime=protocolTime;
         this.memberSet=memberSet;
+        this.infoMap=infoMap;
         this.idString=idStr;
         this.time=time;
     }
@@ -35,6 +39,7 @@ public class PingSender extends Thread{
     private void sendPing(String destID,AtomicInteger counterKey) {
         byte [] sendData = Message.MessageBuilder
                 .buildPingMessage(String.valueOf(counterKey.get()),idString)
+                .addInfoFromList(infoMap.keySet())
                 .getMessage()
                 .toByteArray();
 
@@ -70,6 +75,13 @@ public class PingSender extends Thread{
         return iterator;
     }
 
+    private void updateInfoBuffer() {
+        for (Info i : this.infoMap.keySet()) {
+            if (infoMap.get(i)<this.time.get())
+                infoMap.remove(i);
+        }
+    }
+
 	@Override
 	public void run(){
         ListIterator<String> shuffledIterator=getShuffledMembers();
@@ -90,6 +102,7 @@ public class PingSender extends Thread{
 
             time.getAndIncrement();
             ackReceived=new CountDownLatch(1);
+            updateInfoBuffer();
             sendPing(pingMemberID, time);
 
             boolean hasReceived=false;
@@ -130,6 +143,9 @@ public class PingSender extends Thread{
 
             if (!hasReceived) {
                 // Todo suspect
+                System.out.println("Failure detected - "+pingMemberID);
+                this.infoMap.putIfAbsent(new Info(Info.InfoType.FAILED,pingMemberID), (int) FailureDetector
+                        .getSpreadTime(memberSet.size()) + this.time.intValue());
             }
 		}
 	}
