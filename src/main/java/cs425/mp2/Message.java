@@ -47,9 +47,8 @@ public class Message {
         return ret;
     }
 
-    public static Message extractMessage(byte[] messageBytes) {
-        System.out.println("Message received : " + new String(messageBytes));
-        String[] tokens=new String(messageBytes).split(";");
+    public static Message extractMessage(byte[] messageBytes,int byteLen) {
+        String[] tokens=new String(messageBytes,0,byteLen).split(";");
         String[] mStr=tokens[0].split(" ");
         MessageType type = null;
         try {
@@ -60,7 +59,7 @@ public class Message {
         }
 
         String [] params = new String[mStr.length-1];
-        for (int i=1;i<params.length;i++)
+        for (int i=1;i<params.length+1;i++)
             params[i-1]=mStr[i];
 
         Message ret=new Message(type,params);

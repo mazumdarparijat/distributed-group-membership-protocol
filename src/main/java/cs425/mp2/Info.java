@@ -45,6 +45,25 @@ public class Info {
         return new Info(Info.InfoType.getInfoType(tokens[0].charAt(0)),tokens[1]);
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Info info = (Info) o;
+
+        if (type != info.type) return false;
+        return !(param != null ? !param.equals(info.param) : info.param != null);
+
+    }
+
+    @Override
+    public int hashCode() {
+        int result = type != null ? type.hashCode() : 0;
+        result = 31 * result + (param != null ? param.hashCode() : 0);
+        return result;
+    }
+
     public final InfoType type;
     public final String param;
     Info(InfoType type, String param) {

@@ -21,7 +21,7 @@ public class FDIntroducer extends FailureDetector {
             e.printStackTrace();
         }
 
-        System.out.println("self id created : " + self_id.toString());
+        System.out.println("self id created : " + self_id.pidStr);
 	}
 
     @Override
@@ -29,6 +29,7 @@ public class FDIntroducer extends FailureDetector {
         System.out.println("node started");
         NewJoinThread joiner=new NewJoinThread(this.self_id.port);
         joiner.setDaemon(true);
+        joiner.start();
         this.runFD();
     }
 
@@ -73,10 +74,12 @@ public class FDIntroducer extends FailureDetector {
                 }
 
                 String joinerID=inputReader.next();
-                System.out.println("join requested by : " + joinerID);
+                System.out.println("[JOINER THREAD] join requested by : " + joinerID);
                 for (String member : membershipSet) {
                     outputWriter.println(member);
                 }
+
+                outputWriter.flush();
 
                 try {
                     joinRequest.close();

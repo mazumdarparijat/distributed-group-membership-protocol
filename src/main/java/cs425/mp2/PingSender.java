@@ -9,6 +9,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static cs425.mp2.FailureDetector.getSpreadTime;
@@ -22,11 +23,11 @@ public class PingSender extends Thread{
     private final ConcurrentHashMap<Info,Integer> infoMap;
     private final String idString;
     private AtomicInteger time;
-    private CountDownLatch ackReceived;
+    private AtomicBoolean ackReceived;
 
-    public PingSender(DatagramSocket socket, Set<String> memberSet, ConcurrentHashMap<Info,Integer> infoMap,
-                      String idStr, AtomicInteger time, CountDownLatch ackReceived,
-                      long pingTimeOut, long protocolTime) {
+    public PingSender(DatagramSocket socket, Set<String> memberSet, AtomicBoolean ackReceived,
+                      ConcurrentHashMap<Info,Integer> infoMap, String idStr,
+                      AtomicInteger time, long pingTimeOut, long protocolTime) {
         this.socket=socket;
         this.pingTimeOut=pingTimeOut;
         this.protocolTime=protocolTime;
@@ -34,6 +35,7 @@ public class PingSender extends Thread{
         this.infoMap=infoMap;
         this.idString=idStr;
         this.time=time;
+        this.ackReceived=ackReceived;
     }
 
     private void sendPing(String destID,AtomicInteger counterKey) {
@@ -42,7 +44,6 @@ public class PingSender extends Thread{
                 .addInfoFromList(infoMap.keySet())
                 .getMessage()
                 .toByteArray();
-
         Pid destination = Pid.getPid(destID);
         sendMessage(sendData,destination);
     }
@@ -52,12 +53,13 @@ public class PingSender extends Thread{
                 .buildPingReqMessage(String.valueOf(counter.get()),idString,destID)
                 .getMessage()
                 .toByteArray();
-
         Pid destination = Pid.getPid(relayerID);
         sendMessage(sendData,destination);
     }
 
 	private void sendMessage(byte [] sendData, Pid destination){
+        System.out.println("[SENDER] [INFO] [" + System.currentTimeMillis() + "] message sent  : " +
+                new String(sendData,0,sendData.length)+" : destination : " + destination.pidStr);
 		 try{
 			 DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length,
                      InetAddress.getByName(destination.hostname),destination.port);
@@ -86,67 +88,82 @@ public class PingSender extends Thread{
 	public void run(){
         ListIterator<String> shuffledIterator=getShuffledMembers();
 
-		while(true){
-            long startTime=System.currentTimeMillis();
+		while(true) {
+            long startTime = System.currentTimeMillis();
 
             if (!shuffledIterator.hasNext()) {
-                shuffledIterator=getShuffledMembers();
+                shuffledIterator = getShuffledMembers();
                 continue;
             }
 
-            String pingMemberID=shuffledIterator.next();
+            String pingMemberID = shuffledIterator.next();
 
             // skip if shuffledList contains a member which is deleted from memberSet in between
             if (!memberSet.contains(pingMemberID))
                 continue;
 
             time.getAndIncrement();
-            ackReceived=new CountDownLatch(1);
+            ackReceived.set(false);
             updateInfoBuffer();
             sendPing(pingMemberID, time);
 
-            boolean hasReceived=false;
             try {
-                hasReceived=ackReceived.await(pingTimeOut, TimeUnit.MILLISECONDS);
+                synchronized (ackReceived) {
+                    ackReceived.wait(pingTimeOut);
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
 
-            if (hasReceived)
-                continue;
+            if (ackReceived.get()) {
+                sleepThread(startTime);
+            } else {
+                //if message not in awklist
+                //send ping_requests
+                ackReceived.set(false);
+                ListIterator<String> shuffledk = getShuffledMembers();
+                for (int i = 0; i < SUBGROUP_K; i++) {
+                    if (!shuffledk.hasNext())
+                        break;
 
+                    String nextMember = shuffledk.next();
+                    if (!memberSet.contains(nextMember)) {
+                        i--;
+                        continue;
+                    }
 
-            //if message not in awklist
-			//send ping_requests
-            ackReceived=new CountDownLatch(1);
-            ListIterator<String> shuffledk=getShuffledMembers();
-            for (int i=0;i<SUBGROUP_K;i++) {
-                if (!shuffledk.hasNext())
-                    break;
-
-                String nextMember=shuffledk.next();
-                if (!memberSet.contains(nextMember)) {
-                    i--;
-                    continue;
+                    sendPingReq(nextMember, pingMemberID, time);
                 }
 
-                sendPingReq(nextMember,pingMemberID,time);
-            }
+                try {
+                    synchronized (ackReceived) {
+                        ackReceived.wait(startTime + protocolTime - System.currentTimeMillis());
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
 
-            hasReceived=false;
-            try {
-                hasReceived=ackReceived.await(startTime+protocolTime-System.currentTimeMillis(),
-                        TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+                if (!ackReceived.get()) {
+                    // Todo suspect - dont remove introducer even if failed
+                    System.out.println("[SENDER] [INFO] [" + System.currentTimeMillis() + "] failure detected  : "
+                            + pingMemberID);
+                    this.infoMap.putIfAbsent(new Info(Info.InfoType.FAILED, pingMemberID), (int) FailureDetector
+                            .getSpreadTime(memberSet.size()) + this.time.intValue());
+                    this.memberSet.remove(pingMemberID);
+                    System.out.println("[SENDER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] : failure detected " +
+                            ": " + pingMemberID);
+                } else {
+                    sleepThread(startTime);
+                }
             }
-
-            if (!hasReceived) {
-                // Todo suspect
-                System.out.println("Failure detected - "+pingMemberID);
-                this.infoMap.putIfAbsent(new Info(Info.InfoType.FAILED,pingMemberID), (int) FailureDetector
-                        .getSpreadTime(memberSet.size()) + this.time.intValue());
-            }
-		}
+        }
 	}
+
+    private void sleepThread(long startTime) {
+        try {
+            Thread.sleep(startTime+protocolTime-System.currentTimeMillis());
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
 }

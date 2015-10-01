@@ -18,10 +18,11 @@ public class Transponder extends Thread{
     private final Set<String> membershipSet;
     private final ConcurrentHashMap<Info,Integer> infoMap;
     private AtomicInteger time;
-    private CountDownLatch ackReceived;
+    private AtomicBoolean ackReceived;
+
     public Transponder(DatagramSocket socket, String idStr, Set<String> membershipSet,
-                       ConcurrentHashMap<Info,Integer> infoMap, AtomicInteger time,
-                       CountDownLatch ackReceived) {
+                       AtomicBoolean ackReceived, ConcurrentHashMap<Info,Integer> infoMap,
+                       AtomicInteger time) {
         this.socket=socket;
         this.idString=idStr;
         this.membershipSet=membershipSet;
@@ -43,21 +44,37 @@ public class Transponder extends Thread{
 
     private void processInfoPackets(Message m) {
         for (Info i : m.getInfoList()){
-            this.infoMap.putIfAbsent(i, this.time.intValue() + (int) FailureDetector
-                    .getSpreadTime(this.membershipSet.size()));
+            if (!i.param.equals(idString)) {
+                if (i.type == Info.InfoType.JOIN) {
+                    if (!this.membershipSet.contains(i.param)) {
+                        this.infoMap.put(i, this.time.intValue() + (int) FailureDetector
+                                .getSpreadTime(this.membershipSet.size()));
+                        this.membershipSet.add(i.param);
+                        System.out.println("[RECEIVER] [MEM_ADD] ["+System.currentTimeMillis()+"] : "+i.param);
 
-            if (i.type==Info.InfoType.JOIN)
-                this.membershipSet.add(i.param);
-            else if (i.type==Info.InfoType.FAILED || i.type==Info.InfoType.LEAVE)
-                this.membershipSet.remove(i.param);
+                    }
+                }
+                else if (i.type == Info.InfoType.FAILED || i.type == Info.InfoType.LEAVE) {
+                    if (this.membershipSet.contains(i.param)) {
+                        this.infoMap.put(i, this.time.intValue() + (int) FailureDetector
+                                .getSpreadTime(this.membershipSet.size()));
+                        this.membershipSet.remove(i.param);
+                        System.out.println("[RECEIVER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] " +
+                                ": Failure received : " + i.param);
+                    }
+                }
+
+            }
         }
     }
 
 	public void handleMsg(DatagramPacket receivePacket){
         // if ping - send ack if in membership list and write dissemination to dissemination buffer
         // if ack
-        System.out.println("[Receiver thread] packet received  : "+new String(receivePacket.getData()));
-        Message m = Message.extractMessage(receivePacket.getData());
+        System.out.println("[RECEIVER] [INFO] ["+System.currentTimeMillis()+"] Message Received : "
+                +new String(receivePacket.getData(),0,receivePacket.getLength()));
+
+        Message m = Message.extractMessage(receivePacket.getData(),receivePacket.getLength());
         if (m.type==MessageType.PING) {
             this.processInfoPackets(m);
             byte[] sendBytes;
@@ -74,12 +91,17 @@ public class Transponder extends Thread{
                         .toByteArray();
             }
 
-            sendDatagramPacket(sendBytes,receivePacket.getAddress(),receivePacket.getPort());
+            System.out.println("[RECEIVER] [INFO] ["+System.currentTimeMillis()+"] message sent : "
+                    +new String(sendBytes,0,sendBytes.length));
+            sendDatagramPacket(sendBytes, receivePacket.getAddress(), receivePacket.getPort());
 
         } else if (m.type==MessageType.ACK) {
             this.processInfoPackets(m);
             if (Integer.parseInt(m.getMessageKey())==time.intValue()) {
-                ackReceived.countDown();
+                ackReceived.set(true);
+                synchronized (ackReceived) {
+                    ackReceived.notify();
+                }
             }
 
         } else if (m.type == MessageType.PING_REQUEST) {
@@ -88,11 +110,15 @@ public class Transponder extends Thread{
                         .buildAckReqMessage(m.getMessageKey(),m.getMessageSenderID())
                         .getMessage()
                         .toByteArray();
+                System.out.println("[RECEIVER] [INFO] ["+System.currentTimeMillis()+"] message sent : "
+                        +new String(sendBytes,0,sendBytes.length));
                 sendDatagramPacket(sendBytes,receivePacket.getAddress(),receivePacket.getPort());
             } else {
                 byte [] sendBytes = m.toByteArray();
                 Pid destPid=Pid.getPid(m.getReqDestination());
                 try {
+                    System.out.println("[RECEIVER] [INFO] ["+System.currentTimeMillis()+"] message sent : "
+                            +new String(sendBytes,0,sendBytes.length));
                     sendDatagramPacket(sendBytes, InetAddress.getByName(destPid.hostname), destPid.port);
                 } catch (UnknownHostException e) {
                     e.printStackTrace();
@@ -100,11 +126,17 @@ public class Transponder extends Thread{
             }
         } else if (m.type == MessageType.ACK_REQUEST) {
             if (m.getMessageSenderID().equals(idString)) {
-                if (Integer.parseInt(m.getMessageKey())==time.intValue())
-                    ackReceived.countDown();
+                if (Integer.parseInt(m.getMessageKey())==time.intValue()) {
+                    ackReceived.set(true);
+                    synchronized (ackReceived) {
+                        ackReceived.notify();
+                    }
+                }
             } else {
                 Pid destPid=Pid.getPid(m.getMessageSenderID());
                 try {
+                    System.out.println("[RECEIVER] [INFO] ["+System.currentTimeMillis()+"] message sent : "
+                            +new String(m.toByteArray(),0,m.toByteArray().length));
                     sendDatagramPacket(m.toByteArray(), InetAddress.getByName(destPid.hostname), destPid.port);
                 } catch (UnknownHostException e) {
                     e.printStackTrace();
@@ -118,8 +150,8 @@ public class Transponder extends Thread{
 	public void run(){
 		while(true){
             byte [] receiveData = new byte[MAX_BYTE_LENGTH];
-			DatagramPacket receivedPacket = new DatagramPacket(receiveData, MAX_BYTE_LENGTH);
-            System.out.println("[Receiver thread] Waiting to receive packet");
+			DatagramPacket receivedPacket = new DatagramPacket(receiveData, receiveData.length);
+            System.out.println("[RECEIVER] [INFO] ["+System.currentTimeMillis()+"] Waiting to receive next packet");
             try {
                 socket.receive(receivedPacket);
             } catch (IOException e) {
