@@ -19,6 +19,7 @@ public class Transponder extends Thread{
     private final ConcurrentHashMap<Info,Integer> infoMap;
     private AtomicInteger time;
     private AtomicBoolean ackReceived;
+    private volatile boolean leave=false;
 
     public Transponder(DatagramSocket socket, String idStr, Set<String> membershipSet,
                        AtomicBoolean ackReceived, ConcurrentHashMap<Info,Integer> infoMap,
@@ -29,6 +30,10 @@ public class Transponder extends Thread{
         this.infoMap=infoMap;
         this.time=time;
         this.ackReceived=ackReceived;
+    }
+
+    public void terminate() {
+        leave=true;
     }
 
     private void sendDatagramPacket(byte [] sendBytes, InetAddress address, int port) {
@@ -148,7 +153,7 @@ public class Transponder extends Thread{
 	}
 	@Override
 	public void run(){
-		while(true){
+		while(!leave){
             byte [] receiveData = new byte[MAX_BYTE_LENGTH];
 			DatagramPacket receivedPacket = new DatagramPacket(receiveData, receiveData.length);
             System.out.println("[RECEIVER] [INFO] ["+System.currentTimeMillis()+"] Waiting to receive next packet");
@@ -159,6 +164,6 @@ public class Transponder extends Thread{
             }
 
             handleMsg(receivedPacket);
-		} 
+		}
 	}
 }

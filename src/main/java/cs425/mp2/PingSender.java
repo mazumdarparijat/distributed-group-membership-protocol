@@ -22,11 +22,13 @@ public class PingSender extends Thread{
     private final Set<String> memberSet;
     private final ConcurrentHashMap<Info,Integer> infoMap;
     private final String idString;
+    private final String introID;
     private AtomicInteger time;
     private AtomicBoolean ackReceived;
+    private volatile boolean leave=false;
 
     public PingSender(DatagramSocket socket, Set<String> memberSet, AtomicBoolean ackReceived,
-                      ConcurrentHashMap<Info,Integer> infoMap, String idStr,
+                      ConcurrentHashMap<Info,Integer> infoMap, String idStr, String introID,
                       AtomicInteger time, long pingTimeOut, long protocolTime) {
         this.socket=socket;
         this.pingTimeOut=pingTimeOut;
@@ -34,8 +36,13 @@ public class PingSender extends Thread{
         this.memberSet=memberSet;
         this.infoMap=infoMap;
         this.idString=idStr;
+        this.introID=introID;
         this.time=time;
         this.ackReceived=ackReceived;
+    }
+
+    public void terminate() {
+        leave=true;
     }
 
     private void sendPing(String destID,AtomicInteger counterKey) {
@@ -50,16 +57,16 @@ public class PingSender extends Thread{
 
     private void sendPingReq(String relayerID, String destID,AtomicInteger counter) {
         byte [] sendData = Message.MessageBuilder
-                .buildPingReqMessage(String.valueOf(counter.get()),idString,destID)
+                .buildPingReqMessage(String.valueOf(counter.get()), idString, destID)
                 .getMessage()
                 .toByteArray();
         Pid destination = Pid.getPid(relayerID);
-        sendMessage(sendData,destination);
+        sendMessage(sendData, destination);
     }
 
 	private void sendMessage(byte [] sendData, Pid destination){
         System.out.println("[SENDER] [INFO] [" + System.currentTimeMillis() + "] message sent  : " +
-                new String(sendData,0,sendData.length)+" : destination : " + destination.pidStr);
+                new String(sendData, 0, sendData.length) + " : destination : " + destination.pidStr);
 		 try{
 			 DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length,
                      InetAddress.getByName(destination.hostname),destination.port);
@@ -88,7 +95,7 @@ public class PingSender extends Thread{
 	public void run(){
         ListIterator<String> shuffledIterator=getShuffledMembers();
 
-		while(true) {
+		while(!leave) {
             long startTime = System.currentTimeMillis();
 
             if (!shuffledIterator.hasNext()) {
@@ -144,20 +151,40 @@ public class PingSender extends Thread{
                 }
 
                 if (!ackReceived.get()) {
-                    // Todo suspect - dont remove introducer even if failed
-                    System.out.println("[SENDER] [INFO] [" + System.currentTimeMillis() + "] failure detected  : "
-                            + pingMemberID);
-                    this.infoMap.putIfAbsent(new Info(Info.InfoType.FAILED, pingMemberID), (int) FailureDetector
-                            .getSpreadTime(memberSet.size()) + this.time.intValue());
-                    this.memberSet.remove(pingMemberID);
-                    System.out.println("[SENDER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] : failure detected " +
-                            ": " + pingMemberID);
+                    if (pingMemberID.equals(introID)) {
+                        System.out.println("[SENDER] [INFO] [" + System.currentTimeMillis() + "] : introducer " +
+                                "failure detected " + ": " + pingMemberID);
+                    } else {
+                        this.memberSet.remove(pingMemberID);
+                        this.infoMap.putIfAbsent(new Info(Info.InfoType.FAILED, pingMemberID), (int) FailureDetector
+                                .getSpreadTime(memberSet.size()) + this.time.intValue());
+                        System.out.println("[SENDER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] : failure detected " +
+                                ": " + pingMemberID);
+                    }
                 } else {
                     sleepThread(startTime);
                 }
             }
         }
+
+        leaveSequence();
 	}
+
+    private void leaveSequence() {
+        int timePeriods=Math.min(memberSet.size(), (int) FailureDetector.getSpreadTime(memberSet.size()));
+        Iterator<String> shuffledIterator=getShuffledMembers();
+        for (int i=0;i<timePeriods;i++) {
+            long startTime=System.currentTimeMillis();
+            time.getAndIncrement();
+            byte [] sendData = Message.MessageBuilder
+                    .buildPingMessage(String.valueOf(time.get()),idString)
+                    .addLeaveInfo(idString)
+                    .getMessage()
+                    .toByteArray();
+            sendMessage(sendData,Pid.getPid(shuffledIterator.next()));
+            sleepThread(startTime);
+        }
+    }
 
     private void sleepThread(long startTime) {
         try {

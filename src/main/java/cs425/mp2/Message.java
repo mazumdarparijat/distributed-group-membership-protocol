@@ -158,7 +158,7 @@ public class Message {
         }
 
         public MessageBuilder addLeaveInfo(String leaverID) {
-            this.m.infoAttached.add(new Info(Info.InfoType.JOIN, leaverID));
+            this.m.infoAttached.add(new Info(Info.InfoType.LEAVE, leaverID));
             return this;
         }
 

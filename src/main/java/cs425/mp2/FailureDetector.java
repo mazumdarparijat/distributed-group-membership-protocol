@@ -31,6 +31,7 @@ public class FailureDetector {
         membershipSet= Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>
                 (MAX_NODES,LOAD_FACTOR,CONCURRENCY_LEVEL));
         infoBuffer=new ConcurrentHashMap<Info, Integer>(MAX_NODES,LOAD_FACTOR,CONCURRENCY_LEVEL);
+        introducer_id=new Pid("",0,0);
     }
 
 	public FailureDetector(int port, String intro_address, int intro_port){
@@ -94,7 +95,7 @@ public class FailureDetector {
 		}
 
         System.out.println("[MAIN] [INFO] [" + System.currentTimeMillis() + "] : udp socket initiated");
-		Thread receiverThread = new Transponder(socket,self_id.pidStr,membershipSet,ackReceived,infoBuffer,time);
+		Transponder receiverThread = new Transponder(socket,self_id.pidStr,membershipSet,ackReceived,infoBuffer,time);
 		receiverThread.setDaemon(true);
 		receiverThread.start();
         System.out.println("[MAIN] [INFO] [" + System.currentTimeMillis() + "] : receiver thread started");
@@ -106,15 +107,29 @@ public class FailureDetector {
             e.printStackTrace();
         }
 
-        Thread senderThread = new PingSender(socket,membershipSet,ackReceived,infoBuffer,
-                self_id.pidStr,time,PING_TIME_OUT,PROTOCOL_TIME);
+        PingSender senderThread = new PingSender(socket,membershipSet,ackReceived,infoBuffer,
+                self_id.pidStr,introducer_id.pidStr,time,PING_TIME_OUT,PROTOCOL_TIME);
 		senderThread.setDaemon(true);
 		senderThread.start();
         System.out.println("[MAIN] [INFO] [" + System.currentTimeMillis() + "] : sender thread added");
 		System.out.println("Press any key followed by enter to leave");
 		Scanner in = new Scanner(System.in);
 		in.nextLine();
-	}
+
+        senderThread.terminate();
+        try {
+            senderThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        receiverThread.terminate();
+        try {
+            receiverThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
 
     public static double getSpreadTime(int numMembers) {
         if (numMembers==0)
