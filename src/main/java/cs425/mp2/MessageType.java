@@ -10,7 +10,8 @@ public enum MessageType {
     PING_REQUEST ('Q'),
     ACK ('A'),
     ACK_REQUEST ('B'),
-    MISSING_NOTICE ('M');
+    MISSING_NOTICE ('M'),
+    END ('E');
 
     private final char messagePrefix;
     MessageType(char p) {
@@ -32,6 +33,8 @@ public enum MessageType {
             return ACK_REQUEST;
         else if (prefix=='M')
             return MISSING_NOTICE;
+        else if (prefix=='E')
+            return END;
         else
             throw new IOException("Message prefix supplied is not recognized!");
     }

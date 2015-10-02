@@ -4,11 +4,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 // TODO check functionality
 public class FDIntroducer extends FailureDetector {
@@ -25,18 +23,32 @@ public class FDIntroducer extends FailureDetector {
 	}
 
     @Override
-    public void startFD() {
+    public boolean startFD() {
         System.out.println("node started");
         NewJoinThread joiner=new NewJoinThread(this.self_id.port);
         joiner.setDaemon(true);
         joiner.start();
-        this.runFD();
+        boolean rejoin=this.runFD();
+        joiner.setTerminate();
+        try {
+            joiner.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        return rejoin;
     }
 
     private class NewJoinThread extends Thread {
         private final int port;
+        private final AtomicBoolean terminate;
         public NewJoinThread(int port) {
+            terminate=new AtomicBoolean(false);
             this.port=port;
+        }
+
+        public void setTerminate() {
+            terminate.set(true);
         }
 
         @Override
@@ -45,14 +57,17 @@ public class FDIntroducer extends FailureDetector {
             ServerSocket tcp=null;
             try {
                 tcp=new ServerSocket(this.port);
+                tcp.setSoTimeout(100);
             } catch (IOException e) {
                 e.printStackTrace();
             }
 
-            while (true) {
+            while (!terminate.get()) {
                 Socket joinRequest = null;
                 try {
                     joinRequest=tcp.accept();
+                } catch (SocketTimeoutException e) {
+                    continue;
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -92,6 +107,12 @@ public class FDIntroducer extends FailureDetector {
                 infoBuffer.put(new Info(Info.InfoType.JOIN, joinerID), time.intValue()
                         + (int) getSpreadTime(membershipSet.size()));
                 System.out.println(joinerID + " join added to infoBuffer");
+            }
+
+            try {
+                tcp.close();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }

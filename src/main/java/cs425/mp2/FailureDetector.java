@@ -14,16 +14,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class FailureDetector {
     private final long PING_TIME_OUT=1000;
-    private final long PROTOCOL_TIME=5000;
+    public static final long PROTOCOL_TIME=5000;
     private final int MAX_NODES=10;
     private final int CONCURRENCY_LEVEL=2;
     private final float LOAD_FACTOR= (float) 0.75;
 
     protected AtomicInteger time=new AtomicInteger(0);
     private AtomicBoolean ackReceived=new AtomicBoolean(false);
+    private AtomicBoolean rejoinSignal =new AtomicBoolean(false);
 
 	private Pid introducer_id;
     protected ConcurrentHashMap<Info,Integer> infoBuffer;
+    protected ConcurrentHashMap<String,Integer> recentlyLeft;
     protected Set<String> membershipSet;
     protected Pid self_id;
 
@@ -31,6 +33,7 @@ public class FailureDetector {
         membershipSet= Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>
                 (MAX_NODES,LOAD_FACTOR,CONCURRENCY_LEVEL));
         infoBuffer=new ConcurrentHashMap<Info, Integer>(MAX_NODES,LOAD_FACTOR,CONCURRENCY_LEVEL);
+        recentlyLeft=new ConcurrentHashMap<String, Integer>(MAX_NODES,LOAD_FACTOR,CONCURRENCY_LEVEL);
         introducer_id=new Pid("",0,0);
     }
 
@@ -48,8 +51,9 @@ public class FailureDetector {
         System.out.println("[MAIN] [MEM_ADD] ["+System.currentTimeMillis()+"] : "+introducer_id.pidStr);
 	}
 
-    public void startFD() {
+    public boolean startFD() {
         // get membership list from introducer over TCP
+        System.out.println("startFD start");
         Socket tcpConnection=null;
         try {
             tcpConnection=new Socket(this.introducer_id.hostname,this.introducer_id.port);
@@ -63,14 +67,12 @@ public class FailureDetector {
             inputReader.useDelimiter("\n");
         } catch (IOException e) {
             System.err.println("[MAIN] [ERROR] Error creating input stream to introducer");
-            return;
         }
         PrintWriter outputWriter = null;
         try {
             outputWriter = new PrintWriter(new OutputStreamWriter(tcpConnection.getOutputStream()));
         } catch (IOException e) {
             System.err.println("[MAIN] [ERROR] Error creating input stream from socket");
-            return;
         }
 
         System.out.println("[MAIN] [INFO] ["+System.currentTimeMillis()+"] : tcp connection initiated");
@@ -82,11 +84,15 @@ public class FailureDetector {
             System.out.println("[MAIN] [MEM_ADD] ["+System.currentTimeMillis()+"] : "+newMember);
             membershipSet.add(newMember);
         }
-
-        this.runFD();
+        try {
+            tcpConnection.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return this.runFD();
     }
 
-	protected void runFD() {
+	protected boolean runFD() {
         DatagramSocket socket=null;
 		try {
 			socket = new DatagramSocket(self_id.port);
@@ -95,7 +101,8 @@ public class FailureDetector {
 		}
 
         System.out.println("[MAIN] [INFO] [" + System.currentTimeMillis() + "] : udp socket initiated");
-		Transponder receiverThread = new Transponder(socket,self_id.pidStr,membershipSet,ackReceived,infoBuffer,time);
+		Transponder receiverThread = new Transponder(socket,self_id.pidStr,introducer_id.pidStr,
+                membershipSet,ackReceived,rejoinSignal,infoBuffer,recentlyLeft,time);
 		receiverThread.setDaemon(true);
 		receiverThread.start();
         System.out.println("[MAIN] [INFO] [" + System.currentTimeMillis() + "] : receiver thread started");
@@ -108,14 +115,26 @@ public class FailureDetector {
         }
 
         PingSender senderThread = new PingSender(socket,membershipSet,ackReceived,infoBuffer,
-                self_id.pidStr,introducer_id.pidStr,time,PING_TIME_OUT,PROTOCOL_TIME);
+                recentlyLeft,self_id.pidStr,introducer_id.pidStr,time,PING_TIME_OUT,PROTOCOL_TIME);
 		senderThread.setDaemon(true);
 		senderThread.start();
         System.out.println("[MAIN] [INFO] [" + System.currentTimeMillis() + "] : sender thread added");
 		System.out.println("Press any key followed by enter to leave");
-		Scanner in = new Scanner(System.in);
-		in.nextLine();
 
+        boolean rejoin=false;
+        try {
+            while ((rejoin=System.in.available()<=0) && !rejoinSignal.get()) {
+                Thread.sleep(100);
+            }
+            if (!rejoin)
+                System.in.read(new byte[1024]);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        System.out.println("leave val : "+rejoin);
         senderThread.terminate();
         try {
             senderThread.join();
@@ -123,12 +142,17 @@ public class FailureDetector {
             e.printStackTrace();
         }
 
+        System.out.println("sender thread joined");
         receiverThread.terminate();
         try {
             receiverThread.join();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+
+        System.out.println("receiver thread joined");
+        socket.close();
+        return rejoin;
     }
 
     public static double getSpreadTime(int numMembers) {

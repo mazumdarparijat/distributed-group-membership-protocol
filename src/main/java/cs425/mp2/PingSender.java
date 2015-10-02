@@ -4,15 +4,11 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static cs425.mp2.FailureDetector.getSpreadTime;
 
 public class PingSender extends Thread{
     private static final int SUBGROUP_K=2;
@@ -21,6 +17,7 @@ public class PingSender extends Thread{
     private final long protocolTime;
     private final Set<String> memberSet;
     private final ConcurrentHashMap<Info,Integer> infoMap;
+    private final ConcurrentHashMap<String,Integer> recentlyLeft;
     private final String idString;
     private final String introID;
     private AtomicInteger time;
@@ -28,13 +25,14 @@ public class PingSender extends Thread{
     private volatile boolean leave=false;
 
     public PingSender(DatagramSocket socket, Set<String> memberSet, AtomicBoolean ackReceived,
-                      ConcurrentHashMap<Info,Integer> infoMap, String idStr, String introID,
+                      ConcurrentHashMap<Info, Integer> infoMap, ConcurrentHashMap<String, Integer> recentlyLeft, String idStr, String introID,
                       AtomicInteger time, long pingTimeOut, long protocolTime) {
         this.socket=socket;
         this.pingTimeOut=pingTimeOut;
         this.protocolTime=protocolTime;
         this.memberSet=memberSet;
         this.infoMap=infoMap;
+        this.recentlyLeft=recentlyLeft;
         this.idString=idStr;
         this.introID=introID;
         this.time=time;
@@ -91,6 +89,13 @@ public class PingSender extends Thread{
         }
     }
 
+    private void updateRecentlyLeftList() {
+        for (String i : this.recentlyLeft.keySet()) {
+            if (recentlyLeft.get(i)<this.time.get())
+                recentlyLeft.remove(i);
+        }
+    }
+
 	@Override
 	public void run(){
         ListIterator<String> shuffledIterator=getShuffledMembers();
@@ -112,6 +117,7 @@ public class PingSender extends Thread{
             time.getAndIncrement();
             ackReceived.set(false);
             updateInfoBuffer();
+            updateRecentlyLeftList();
             sendPing(pingMemberID, time);
 
             try {
@@ -151,15 +157,16 @@ public class PingSender extends Thread{
                 }
 
                 if (!ackReceived.get()) {
+                    this.infoMap.putIfAbsent(new Info(Info.InfoType.FAILED, pingMemberID), (int) FailureDetector
+                            .getSpreadTime(memberSet.size()) + this.time.intValue());
+                    this.recentlyLeft.putIfAbsent(pingMemberID,this.time.intValue()+3*memberSet.size());
                     if (pingMemberID.equals(introID)) {
                         System.out.println("[SENDER] [INFO] [" + System.currentTimeMillis() + "] : introducer " +
                                 "failure detected " + ": " + pingMemberID);
                     } else {
                         this.memberSet.remove(pingMemberID);
-                        this.infoMap.putIfAbsent(new Info(Info.InfoType.FAILED, pingMemberID), (int) FailureDetector
-                                .getSpreadTime(memberSet.size()) + this.time.intValue());
-                        System.out.println("[SENDER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] : failure detected " +
-                                ": " + pingMemberID);
+                        System.out.println("[SENDER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] : " +
+                                "failure detected : " + pingMemberID);
                     }
                 } else {
                     sleepThread(startTime);

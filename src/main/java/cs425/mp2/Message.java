@@ -65,7 +65,7 @@ public class Message {
         Message ret=new Message(type,params);
         for (int i=1;i<tokens.length;i++) {
             try {
-                ret.infoAttached.add(Info.fromString(tokens[1]));
+                ret.infoAttached.add(Info.fromString(tokens[i]));
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -141,6 +141,13 @@ public class Message {
             String [] args=new String[0];
 
             MessageBuilder newInstance=new MessageBuilder(MessageType.MISSING_NOTICE,args);
+            return newInstance;
+        }
+
+        public static MessageBuilder buildEndNoticeMessage() {
+            String [] args=new String[0];
+
+            MessageBuilder newInstance=new MessageBuilder(MessageType.END,args);
             return newInstance;
         }
 

@@ -11,10 +11,14 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
 public class serverMain {
+    private static int port=0;
+    private static int intro_port=0;
+    private static String intro_address="";
+    private static boolean isIntroducer=false;
 	/**
 	 * Formats commandline inputs and flags
 	 */
-	private static FailureDetector FormatCommandLineInputs(String [] args) {
+	private static void FormatCommandLineInputs(String [] args) {
 		Options op=createOptions();
 		CommandLineParser parser=new DefaultParser();
 		CommandLine line=null;
@@ -25,14 +29,14 @@ public class serverMain {
 			e.printStackTrace();
 		}
 		if (!line.hasOption("i")) {	
-			int port = Integer.parseInt(line.getOptionValue("port"));
-			return new FDIntroducer(port);
+			serverMain.port = Integer.parseInt(line.getOptionValue("port"));
+			isIntroducer=true;
 		}
 		else {
-			int port = Integer.parseInt(line.getOptionValue("port"));
-			String iadd=line.getOptionValues("i")[0];  
-			int iport=Integer.parseInt(line.getOptionValues("i")[1]);
-			return new FailureDetector(port,iadd,iport);
+            isIntroducer=false;
+			serverMain.port = Integer.parseInt(line.getOptionValue("port"));
+			serverMain.intro_address=line.getOptionValues("i")[0];
+			serverMain.intro_port=Integer.parseInt(line.getOptionValues("i")[1]);
 		}
 	}
 
@@ -54,10 +58,21 @@ public class serverMain {
 	 */
 	private static void printHelp(Options op) {
 		HelpFormatter formatter = new HelpFormatter();
-		formatter.printHelp("failureDetector",op);
+		formatter.printHelp("failureDetector", op);
 	}
+
+    private static FailureDetector startNode() {
+        if (serverMain.isIntroducer)
+            return new FDIntroducer(serverMain.port);
+        else
+            return new FailureDetector(serverMain.port,serverMain.intro_address,serverMain.intro_port);
+    }
+
 	public static void main(String [] args) throws IOException {
-		FailureDetector failureDetector = FormatCommandLineInputs(args);
-		failureDetector.startFD();
+		FormatCommandLineInputs(args);
+        boolean restart=serverMain.startNode().startFD();
+        while (restart) {
+            restart=serverMain.startNode().startFD();
+        }
 	}
 }

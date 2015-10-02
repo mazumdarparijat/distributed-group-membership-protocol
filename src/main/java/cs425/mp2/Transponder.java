@@ -1,10 +1,7 @@
 package cs425.mp2;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -15,21 +12,27 @@ public class Transponder extends Thread{
     private static final int MAX_BYTE_LENGTH =1024;
 	private final DatagramSocket socket;
     private final String idString;
+    private final String introID;
     private final Set<String> membershipSet;
     private final ConcurrentHashMap<Info,Integer> infoMap;
+    private final ConcurrentHashMap<String,Integer> recentlyLeft;
     private AtomicInteger time;
     private AtomicBoolean ackReceived;
+    private AtomicBoolean rejoinSignal;
     private volatile boolean leave=false;
 
-    public Transponder(DatagramSocket socket, String idStr, Set<String> membershipSet,
-                       AtomicBoolean ackReceived, ConcurrentHashMap<Info,Integer> infoMap,
-                       AtomicInteger time) {
+    public Transponder(DatagramSocket socket, String idStr, String introID, Set<String> membershipSet,
+                       AtomicBoolean ackReceived, AtomicBoolean rejoinSignal, ConcurrentHashMap<Info, Integer> infoMap,
+                       ConcurrentHashMap<String, Integer> recentlyLeft, AtomicInteger time) {
         this.socket=socket;
         this.idString=idStr;
+        this.introID=introID;
         this.membershipSet=membershipSet;
         this.infoMap=infoMap;
+        this.recentlyLeft=recentlyLeft;
         this.time=time;
         this.ackReceived=ackReceived;
+        this.rejoinSignal=rejoinSignal;
     }
 
     public void terminate() {
@@ -48,11 +51,14 @@ public class Transponder extends Thread{
     }
 
     private void processInfoPackets(Message m) {
+        System.out.println("******************* INFOLIST *******************"+m.getInfoList());
         for (Info i : m.getInfoList()){
             if (!i.param.equals(idString)) {
-                if (i.type == Info.InfoType.JOIN) {
+                if ((i.type == Info.InfoType.JOIN) && (!this.recentlyLeft.containsKey(i.param))) {
+                    System.out.println("******************* JOIN *******************"+i.param);
+                    System.out.println("******************* JOIN *******************"+recentlyLeft);
                     if (!this.membershipSet.contains(i.param)) {
-                        this.infoMap.put(i, this.time.intValue() + (int) FailureDetector
+                        this.infoMap.putIfAbsent(i, this.time.intValue() + (int) FailureDetector
                                 .getSpreadTime(this.membershipSet.size()));
                         this.membershipSet.add(i.param);
                         System.out.println("[RECEIVER] [MEM_ADD] ["+System.currentTimeMillis()+"] : "+i.param);
@@ -61,12 +67,22 @@ public class Transponder extends Thread{
                 }
                 else if (i.type == Info.InfoType.FAILED || i.type == Info.InfoType.LEAVE) {
                     if (this.membershipSet.contains(i.param)) {
-                        this.infoMap.put(i, this.time.intValue() + (int) FailureDetector
+                        this.infoMap.putIfAbsent(i, this.time.intValue() + (int) FailureDetector
                                 .getSpreadTime(this.membershipSet.size()));
-                        this.membershipSet.remove(i.param);
-                        System.out.println("[RECEIVER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] " +
-                                ": Failure received : " + i.param);
+
+                        if (i.param.equals(introID)) {
+                            System.out.println("[RECEIVER] [INFO] [" + System.currentTimeMillis() + "] " +
+                                    ": introducer failure received : " + i.param);
+                        } else {
+                            this.membershipSet.remove(i.param);
+                            System.out.println("[RECEIVER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] " +
+                                    ": Failure received : " + i.param);
+                        }
                     }
+
+                    this.recentlyLeft.putIfAbsent(i.param,this.time.intValue()+3*membershipSet.size());
+                    System.out.println("******************* LEAVE *******************"+i.param);
+                    System.out.println("******************* LEAVE *******************" + recentlyLeft);
                 }
 
             }
@@ -147,18 +163,28 @@ public class Transponder extends Thread{
                     e.printStackTrace();
                 }
             }
+        } else if (m.type==MessageType.MISSING_NOTICE) {
+            this.rejoinSignal.set(true);
         } else {
                 throw new IllegalArgumentException("Message type not recognized");
         }
 	}
 	@Override
 	public void run(){
-		while(!leave){
+        try {
+            socket.setSoTimeout((int) (FailureDetector.PROTOCOL_TIME*2));
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+
+        while(!leave){
             byte [] receiveData = new byte[MAX_BYTE_LENGTH];
 			DatagramPacket receivedPacket = new DatagramPacket(receiveData, receiveData.length);
             System.out.println("[RECEIVER] [INFO] ["+System.currentTimeMillis()+"] Waiting to receive next packet");
             try {
                 socket.receive(receivedPacket);
+            } catch (SocketTimeoutException e) {
+                continue;
             } catch (IOException e) {
                 e.printStackTrace();
             }
