@@ -20,13 +20,14 @@ public class PingSender extends Thread{
     private final ConcurrentHashMap<String,Integer> recentlyLeft;
     private final String idString;
     private final String introID;
+    private final AtomicBoolean introFailed;
     private AtomicInteger time;
     private AtomicBoolean ackReceived;
     private volatile boolean leave=false;
 
     public PingSender(DatagramSocket socket, Set<String> memberSet, AtomicBoolean ackReceived,
                       ConcurrentHashMap<Info, Integer> infoMap, ConcurrentHashMap<String, Integer> recentlyLeft, String idStr, String introID,
-                      AtomicInteger time, long pingTimeOut, long protocolTime) {
+                      AtomicBoolean introducer_failed, AtomicInteger time, long pingTimeOut, long protocolTime) {
         this.socket=socket;
         this.pingTimeOut=pingTimeOut;
         this.protocolTime=protocolTime;
@@ -37,6 +38,7 @@ public class PingSender extends Thread{
         this.introID=introID;
         this.time=time;
         this.ackReceived=ackReceived;
+        this.introFailed=introducer_failed;
     }
 
     public void terminate() {
@@ -83,6 +85,7 @@ public class PingSender extends Thread{
     }
 
     private void updateInfoBuffer() {
+        System.out.println("[DEBUG] INFO BUFFER : " + infoMap);
         for (Info i : this.infoMap.keySet()) {
             if (infoMap.get(i)<this.time.get())
                 infoMap.remove(i);
@@ -90,10 +93,16 @@ public class PingSender extends Thread{
     }
 
     private void updateRecentlyLeftList() {
+        System.out.println("[DEBUG] RECENTLY LEFT : "+recentlyLeft);
         for (String i : this.recentlyLeft.keySet()) {
             if (recentlyLeft.get(i)<this.time.get())
                 recentlyLeft.remove(i);
         }
+    }
+
+    private void printMembershipList() {
+        System.out.println("[DEBUG] MEMBERSHIP LIST : "+memberSet);
+        System.out.println("[DEBUG] INTRO FAILED : "+introFailed.get());
     }
 
 	@Override
@@ -118,6 +127,7 @@ public class PingSender extends Thread{
             ackReceived.set(false);
             updateInfoBuffer();
             updateRecentlyLeftList();
+            printMembershipList();
             sendPing(pingMemberID, time);
 
             try {
@@ -129,6 +139,8 @@ public class PingSender extends Thread{
             }
 
             if (ackReceived.get()) {
+                if (pingMemberID.equals(introID))
+                    introFailed.set(false);
                 sleepThread(startTime);
             } else {
                 //if message not in awklist
@@ -163,12 +175,15 @@ public class PingSender extends Thread{
                     if (pingMemberID.equals(introID)) {
                         System.out.println("[SENDER] [INFO] [" + System.currentTimeMillis() + "] : introducer " +
                                 "failure detected " + ": " + pingMemberID);
+                        introFailed.set(true);
                     } else {
                         this.memberSet.remove(pingMemberID);
                         System.out.println("[SENDER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] : " +
                                 "failure detected : " + pingMemberID);
                     }
                 } else {
+                    if (pingMemberID.equals(introID))
+                        introFailed.set(false);
                     sleepThread(startTime);
                 }
             }

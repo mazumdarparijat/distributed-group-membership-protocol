@@ -16,12 +16,13 @@ public class Transponder extends Thread{
     private final Set<String> membershipSet;
     private final ConcurrentHashMap<Info,Integer> infoMap;
     private final ConcurrentHashMap<String,Integer> recentlyLeft;
+    private final AtomicBoolean introFailed;
     private AtomicInteger time;
     private AtomicBoolean ackReceived;
     private AtomicBoolean rejoinSignal;
     private volatile boolean leave=false;
 
-    public Transponder(DatagramSocket socket, String idStr, String introID, Set<String> membershipSet,
+    public Transponder(DatagramSocket socket, String idStr, String introID, AtomicBoolean introducer_failed, Set<String> membershipSet,
                        AtomicBoolean ackReceived, AtomicBoolean rejoinSignal, ConcurrentHashMap<Info, Integer> infoMap,
                        ConcurrentHashMap<String, Integer> recentlyLeft, AtomicInteger time) {
         this.socket=socket;
@@ -33,6 +34,7 @@ public class Transponder extends Thread{
         this.time=time;
         this.ackReceived=ackReceived;
         this.rejoinSignal=rejoinSignal;
+        this.introFailed=introducer_failed;
     }
 
     public void terminate() {
@@ -51,12 +53,9 @@ public class Transponder extends Thread{
     }
 
     private void processInfoPackets(Message m) {
-        System.out.println("******************* INFOLIST *******************"+m.getInfoList());
         for (Info i : m.getInfoList()){
             if (!i.param.equals(idString)) {
                 if ((i.type == Info.InfoType.JOIN) && (!this.recentlyLeft.containsKey(i.param))) {
-                    System.out.println("******************* JOIN *******************"+i.param);
-                    System.out.println("******************* JOIN *******************"+recentlyLeft);
                     if (!this.membershipSet.contains(i.param)) {
                         this.infoMap.putIfAbsent(i, this.time.intValue() + (int) FailureDetector
                                 .getSpreadTime(this.membershipSet.size()));
@@ -73,16 +72,16 @@ public class Transponder extends Thread{
                         if (i.param.equals(introID)) {
                             System.out.println("[RECEIVER] [INFO] [" + System.currentTimeMillis() + "] " +
                                     ": introducer failure received : " + i.param);
+                            introFailed.set(true);
+
                         } else {
                             this.membershipSet.remove(i.param);
                             System.out.println("[RECEIVER] [MEM_REMOVE] [" + System.currentTimeMillis() + "] " +
-                                    ": Failure received : " + i.param);
+                                    ": failure received : " + i.param);
                         }
                     }
 
                     this.recentlyLeft.putIfAbsent(i.param,this.time.intValue()+3*membershipSet.size());
-                    System.out.println("******************* LEAVE *******************"+i.param);
-                    System.out.println("******************* LEAVE *******************" + recentlyLeft);
                 }
 
             }
