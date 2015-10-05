@@ -8,8 +8,15 @@ import java.net.*;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-// TODO check functionality
+
+/**
+ * Class for introducer
+ *
+ */
 public class FDIntroducer extends FailureDetector {
+	/**Constructor
+	 * @param port for running introducer
+	 */
 	public FDIntroducer(int port){
         super();
 
@@ -22,6 +29,10 @@ public class FDIntroducer extends FailureDetector {
         System.out.println("self id created : " + self_id.pidStr);
 	}
 
+    /**
+     * Start FD for introducer
+     * @see cs425.mp2.FailureDetector#startFD()
+     */
     @Override
     public boolean startFD() {
         System.out.println("node started");
@@ -39,18 +50,32 @@ public class FDIntroducer extends FailureDetector {
         return rejoin;
     }
 
+    /**
+     * Thread class for joining
+     *
+     */
     private class NewJoinThread extends Thread {
         private final int port;
         private final AtomicBoolean terminate;
+        /** Constructor
+         * @param port for TCP 
+         */
         public NewJoinThread(int port) {
             terminate=new AtomicBoolean(false);
             this.port=port;
         }
 
+        /**
+         * Kill this thread
+         */
         public void setTerminate() {
             terminate.set(true);
         }
 
+        /** 
+         * Run TCP thread for joining
+         * @see java.lang.Thread#run()
+         */
         @Override
         public void run() {
             System.out.println("joiner thread started");

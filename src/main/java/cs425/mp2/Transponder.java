@@ -8,6 +8,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Receiver Class
+ */
 public class Transponder extends Thread{
     private static final int MAX_BYTE_LENGTH =1024;
 	private final DatagramSocket socket;
@@ -22,6 +25,18 @@ public class Transponder extends Thread{
     private AtomicBoolean rejoinSignal;
     private volatile boolean leave=false;
 
+    /**Constructor
+     * @param socket
+     * @param idStr
+     * @param introID
+     * @param introducer_failed
+     * @param membershipSet
+     * @param ackReceived
+     * @param rejoinSignal
+     * @param infoMap
+     * @param recentlyLeft
+     * @param time
+     */
     public Transponder(DatagramSocket socket, String idStr, String introID, AtomicBoolean introducer_failed, Set<String> membershipSet,
                        AtomicBoolean ackReceived, AtomicBoolean rejoinSignal, ConcurrentHashMap<Info, Integer> infoMap,
                        ConcurrentHashMap<String, Integer> recentlyLeft, AtomicInteger time) {
@@ -37,10 +52,18 @@ public class Transponder extends Thread{
         this.introFailed=introducer_failed;
     }
 
+    /**
+     * Kill reciever
+     */
     public void terminate() {
         leave=true;
     }
 
+    /** Send paket
+     * @param sendBytes
+     * @param address
+     * @param port
+     */
     private void sendDatagramPacket(byte [] sendBytes, InetAddress address, int port) {
         DatagramPacket sendPacket = new DatagramPacket(sendBytes, sendBytes.length,
                 address,port);
@@ -52,6 +75,9 @@ public class Transponder extends Thread{
         }
     }
 
+    /**Process recieved packets
+     * @param m
+     */
     private void processInfoPackets(Message m) {
         for (Info i : m.getInfoList()){
             if (!i.param.equals(idString)) {
@@ -88,6 +114,9 @@ public class Transponder extends Thread{
         }
     }
 
+	/** Handle different messages recieved
+	 * @param receivePacket
+	 */
 	public void handleMsg(DatagramPacket receivePacket){
         // if ping - send ack if in membership list and write dissemination to dissemination buffer
         // if ack
@@ -168,6 +197,9 @@ public class Transponder extends Thread{
                 throw new IllegalArgumentException("Message type not recognized");
         }
 	}
+	/** Run receiver
+	 * @see java.lang.Thread#run()
+	 */
 	@Override
 	public void run(){
         try {

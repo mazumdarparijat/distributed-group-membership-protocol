@@ -3,7 +3,7 @@ package cs425.mp2;
 import java.io.IOException;
 
 /**
- * Created by parijatmazumdar on 27/09/15.
+ * Annum for Type of messages
  */
 public enum MessageType {
     PING ('P'),
@@ -18,10 +18,18 @@ public enum MessageType {
         messagePrefix =p;
     }
 
+    /** Get message prefix from message
+     * @return
+     */
     public char getMessagePrefix() {
         return messagePrefix;
     }
 
+    /** Get message type from message
+     * @param prefix
+     * @return
+     * @throws IOException
+     */
     public static MessageType getMessageType(char prefix) throws IOException {
         if (prefix=='P')
             return PING;

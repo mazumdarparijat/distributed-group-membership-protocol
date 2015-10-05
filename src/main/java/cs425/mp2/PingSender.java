@@ -10,6 +10,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
+/** Thread class for sender
+ * 
+ */
 public class PingSender extends Thread{
     private static final int SUBGROUP_K=2;
 	private final DatagramSocket socket;
@@ -25,6 +28,19 @@ public class PingSender extends Thread{
     private AtomicBoolean ackReceived;
     private volatile boolean leave=false;
 
+    /** Constructor
+     * @param socket
+     * @param memberSet
+     * @param ackReceived
+     * @param infoMap
+     * @param recentlyLeft
+     * @param idStr
+     * @param introID
+     * @param introducer_failed
+     * @param time
+     * @param pingTimeOut
+     * @param protocolTime
+     */
     public PingSender(DatagramSocket socket, Set<String> memberSet, AtomicBoolean ackReceived,
                       ConcurrentHashMap<Info, Integer> infoMap, ConcurrentHashMap<String, Integer> recentlyLeft, String idStr, String introID,
                       AtomicBoolean introducer_failed, AtomicInteger time, long pingTimeOut, long protocolTime) {
@@ -41,10 +57,14 @@ public class PingSender extends Thread{
         this.introFailed=introducer_failed;
     }
 
+    /**Terminate sender
+     * 
+     */
     public void terminate() {
         leave=true;
     }
 
+ 
     private void sendPing(String destID,AtomicInteger counterKey) {
         byte [] sendData = Message.MessageBuilder
                 .buildPingMessage(String.valueOf(counterKey.get()),idString)
@@ -76,6 +96,9 @@ public class PingSender extends Thread{
 		 }
 	}
 
+    /** Shuffle memlist for completeness guarantee
+     * @return
+     */
     ListIterator<String> getShuffledMembers() {
         // TODO handle empty memberSet
         List<String> shuffledMembers=new ArrayList<String>(memberSet);
@@ -84,6 +107,9 @@ public class PingSender extends Thread{
         return iterator;
     }
 
+    /**
+     * Add info to buffer
+     */
     private void updateInfoBuffer() {
         System.out.println("[DEBUG] INFO BUFFER : " + infoMap);
         for (Info i : this.infoMap.keySet()) {
@@ -92,6 +118,9 @@ public class PingSender extends Thread{
         }
     }
 
+    /**
+     * Add failed to recently failed
+     */
     private void updateRecentlyLeftList() {
         System.out.println("[DEBUG] RECENTLY LEFT : "+recentlyLeft);
         for (String i : this.recentlyLeft.keySet()) {
@@ -105,6 +134,9 @@ public class PingSender extends Thread{
         System.out.println("[DEBUG] INTRO FAILED : "+introFailed.get());
     }
 
+	/** Start sender
+	 * @see java.lang.Thread#run()
+	 */
 	@Override
 	public void run(){
         ListIterator<String> shuffledIterator=getShuffledMembers();
@@ -192,6 +224,9 @@ public class PingSender extends Thread{
         leaveSequence();
 	}
 
+    /**
+     * Start leaving protocol
+     */
     private void leaveSequence() {
         int timePeriods=Math.min(memberSet.size(), (int) FailureDetector.getSpreadTime(memberSet.size()));
         Iterator<String> shuffledIterator=getShuffledMembers();
@@ -208,6 +243,9 @@ public class PingSender extends Thread{
         }
     }
 
+    /** Wait for sometime after joining
+     * @param startTime
+     */
     private void sleepThread(long startTime) {
         try {
             Thread.sleep(startTime+protocolTime-System.currentTimeMillis());

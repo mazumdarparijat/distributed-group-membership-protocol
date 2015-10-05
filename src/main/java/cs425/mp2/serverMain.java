@@ -10,6 +10,9 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
+/**Main class for FD
+ * 
+ */
 public class serverMain {
     private static int port=0;
     private static int intro_port=0;
@@ -61,6 +64,9 @@ public class serverMain {
 		formatter.printHelp("failureDetector", op);
 	}
 
+    /**Start FD module
+     * @return
+     */
     private static FailureDetector startNode() {
         if (serverMain.isIntroducer)
             return new FDIntroducer(serverMain.port);

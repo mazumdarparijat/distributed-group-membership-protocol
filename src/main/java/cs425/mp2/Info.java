@@ -2,11 +2,17 @@ package cs425.mp2;
 
 import java.io.IOException;
 
+
 /**
- * Created by parijatmazumdar on 29/09/15.
+ * Message Info Class
+ *
  */
 public class Info {
     private static char PARAM_DELIM=' ';
+    /**
+     * Defines types of messages
+     *
+     */
     public enum InfoType {
         JOIN ('J'),
         LEAVE ('L'),
@@ -18,6 +24,11 @@ public class Info {
             prefix=c;
         }
 
+        /** Get type of message
+         * @param prefix
+         * @return Type of message 
+         * @throws IOException
+         */
         public static InfoType getInfoType(char prefix) throws IOException {
             if (prefix=='J')
                 return JOIN;
@@ -39,6 +50,11 @@ public class Info {
         return sb.toString();
     }
 
+    /** Deserializes a string
+     * @param infoAsString
+     * @return
+     * @throws IOException
+     */
     public static Info fromString(String infoAsString) throws IOException {
         String [] tokens=infoAsString.split(" ");
         assert tokens.length==2 : "Expected size is 2";
